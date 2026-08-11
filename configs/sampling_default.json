@@ -1,10 +1,12 @@
 {
   "beta": 1.0,
   "dimension": 100,
-  "lambdas": [0.1, 0.01, 0.001],
-  "n_steps": 200000,
-  "burn_in": 50000,
+  "kappa": 100.0,
+  "lambdas": [0.002, 0.001, 0.0005],
+  "n_steps": 1000000,
+  "burn_in": 200000,
   "n_reps": 30,
   "seed": 1234,
-  "a_tame": 0.05
+  "a_tame": 0.05,
+  "ell_tame": 2.0
 }

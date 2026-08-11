@@ -16,7 +16,7 @@ def test_ktula_optimizer_shape():
     theta_next, active = optimizer.step(theta, grad, rng)
 
     assert theta_next.shape == theta.shape
-    assert active.shape == theta.shape
+    assert isinstance(active, bool)
     assert np.isfinite(theta_next).all()
 
 
@@ -34,7 +34,7 @@ def test_trlmc_optimizer_shape():
     )
 
     assert theta_next.shape == theta.shape
-    assert active.shape == theta.shape
+    assert isinstance(active, bool)
     assert np.isfinite(theta_next).all()
 
 
@@ -47,5 +47,4 @@ def test_ktula_optimizer_active_fraction():
     theta_next, active = optimizer.step(theta, grad, rng)
 
     assert theta_next.shape == theta.shape
-    assert active.dtype == bool
-    assert 0.0 <= float(np.mean(active)) <= 1.0
+    assert isinstance(active, bool)

@@ -15,10 +15,13 @@ The adaptive taming used throughout is
 h_\lambda^{\mathrm{ad}}(x)
 =
 a x+
-\frac{h(x)-a x}{1+g(\sqrt{\lambda}|h(x)|)}.
+\frac{h(x)-a x}
+{\sqrt{1+g(\lambda\|x\|^{2(\ell+1)})}}.
 ```
 
-The residual `h(x)-a x` is divided, while the switch in the denominator is triggered by the full drift `h(x)`. The switch is
+The residual vector is divided by one scalar denominator shared by every
+coordinate. Taming is inactive when `sqrt(lambda) * ||x||^(ell+1) < 1` and
+activates smoothly as the Euclidean norm of the full state increases. The switch is
 
 ```math
 g(t)=
@@ -120,7 +123,10 @@ from tamed_langevin import KTULASampler
 
 
 def drift(x):
-    return x**3 - x
+    out = np.empty_like(x)
+    out[0] = x[0]**3 - x[0]
+    out[1:] = 100.0 * x[1:]
+    return out
 
 
 x0 = np.zeros(100)
@@ -131,6 +137,7 @@ sampler = KTULASampler(
     step_size=0.01,
     beta=1.0,
     a_tame=0.05,
+    ell_tame=2.0,
 )
 
 samples, active = sampler.sample(
@@ -154,7 +161,10 @@ from tamed_langevin import TRLMCSampler
 
 
 def drift(x):
-    return x**3 - x
+    out = np.empty_like(x)
+    out[0] = x[0]**3 - x[0]
+    out[1:] = 100.0 * x[1:]
+    return out
 
 
 x0 = np.zeros(100)
@@ -165,6 +175,7 @@ sampler = TRLMCSampler(
     step_size=0.01,
     beta=1.0,
     a_tame=0.05,
+    ell_tame=2.0,
 )
 
 samples, active = sampler.sample(
@@ -200,13 +211,14 @@ optimizer = KTULAOptimizer(
     step_size=0.01,
     beta=1.0e6,
     a_tame=0.05,
+    ell_tame=4.0,
 )
 
 for _ in range(1000):
     theta, active = optimizer.step(theta, grad(theta), rng)
 
 print(np.linalg.norm(theta))
-print(active.mean())
+print(active)
 ```
 
 ### Optimization with tRLMC
@@ -230,13 +242,14 @@ optimizer = TRLMCOptimizer(
     step_size=0.01,
     beta=1.0e6,
     a_tame=0.05,
+    ell_tame=4.0,
 )
 
 for _ in range(1000):
     theta, active = optimizer.step(theta, grad(theta), grad, rng)
 
 print(np.linalg.norm(theta))
-print(active.mean())
+print(active)
 ```
 
 ## Diagnostics

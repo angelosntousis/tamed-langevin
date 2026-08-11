@@ -12,5 +12,6 @@
   "eta": 1.0,
   "init_scale": 2.0,
   "beta": 1000000.0,
-  "a_tame": 0.05
+  "a_tame": 0.05,
+  "ell_tame": 4.0
 }

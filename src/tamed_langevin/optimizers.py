@@ -17,13 +17,14 @@ class KTULAOptimizer:
     step_size: float
     beta: float = 1.0e6
     a_tame: float = 0.05
+    ell_tame: float = 0.0
 
     def step(
         self,
         theta: Array,
         grad: Array,
         rng: np.random.Generator,
-    ) -> tuple[Array, Array]:
+    ) -> tuple[Array, bool]:
         theta = np.asarray(theta, dtype=float)
         grad = np.asarray(grad, dtype=float)
 
@@ -32,6 +33,7 @@ class KTULAOptimizer:
             state=theta,
             step_size=self.step_size,
             a_tame=self.a_tame,
+            ell=self.ell_tame,
         )
 
         noise = rng.normal(size=theta.shape)
@@ -49,6 +51,7 @@ class TRLMCOptimizer:
     step_size: float
     beta: float = 1.0e6
     a_tame: float = 0.05
+    ell_tame: float = 0.0
 
     def step(
         self,
@@ -56,7 +59,7 @@ class TRLMCOptimizer:
         grad: Array,
         grad_at: GradFn,
         rng: np.random.Generator,
-    ) -> tuple[Array, Array]:
+    ) -> tuple[Array, bool]:
         theta = np.asarray(theta, dtype=float)
         grad = np.asarray(grad, dtype=float)
 
@@ -75,6 +78,7 @@ class TRLMCOptimizer:
             state=theta,
             step_size=self.step_size,
             a_tame=self.a_tame,
+            ell=self.ell_tame,
         )
 
         theta_tau = (
@@ -90,6 +94,7 @@ class TRLMCOptimizer:
             state=theta_tau,
             step_size=self.step_size,
             a_tame=self.a_tame,
+            ell=self.ell_tame,
         )
 
         theta_next = (

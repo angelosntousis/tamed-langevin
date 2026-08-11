@@ -5,11 +5,59 @@ from typing import Callable
 
 import numpy as np
 
-from tamed_langevin.taming import adaptive_tamed_drift
+from tamed_langevin.taming import adaptive_tamed_drift, tamed_drift
 
 
 Array = np.ndarray
 DriftFn = Callable[[Array], Array]
+
+
+@dataclass
+class StandardKTULASampler:
+    """Global kTULA sampler using the unswitched taming denominator."""
+
+    drift: DriftFn
+    step_size: float
+    beta: float = 1.0
+    a_tame: float = 0.05
+    ell_tame: float = 0.0
+
+    def step(self, x: Array, rng: np.random.Generator) -> tuple[Array, bool]:
+        h = self.drift(x)
+        h_tamed = tamed_drift(
+            drift=h,
+            state=x,
+            step_size=self.step_size,
+            a_tame=self.a_tame,
+            ell=self.ell_tame,
+        )
+        noise = rng.normal(size=x.shape)
+        x_next = (
+            x
+            - self.step_size * h_tamed
+            + np.sqrt(2.0 * self.step_size / self.beta) * noise
+        )
+        return x_next, True
+
+    def sample(
+        self,
+        x0: Array,
+        n_steps: int,
+        burn_in: int = 0,
+        seed: int | None = None,
+    ) -> Array:
+        rng = np.random.default_rng(seed)
+        x = np.asarray(x0, dtype=float).copy()
+        samples = []
+
+        for step in range(n_steps):
+            x, _ = self.step(x, rng)
+            if not np.isfinite(x).all():
+                raise FloatingPointError(f"kTULA diverged at step {step}")
+            if step >= burn_in:
+                samples.append(x.copy())
+
+        return np.asarray(samples)
 
 
 @dataclass
@@ -18,14 +66,16 @@ class KTULASampler:
     step_size: float
     beta: float = 1.0
     a_tame: float = 0.05
+    ell_tame: float = 0.0
 
-    def step(self, x: Array, rng: np.random.Generator) -> tuple[Array, Array]:
+    def step(self, x: Array, rng: np.random.Generator) -> tuple[Array, bool]:
         h = self.drift(x)
         h_tamed, active = adaptive_tamed_drift(
             drift=h,
             state=x,
             step_size=self.step_size,
             a_tame=self.a_tame,
+            ell=self.ell_tame,
         )
 
         noise = rng.normal(size=x.shape)
@@ -60,7 +110,7 @@ class KTULASampler:
             if step >= burn_in:
                 samples.append(x.copy())
                 if return_active:
-                    active_fractions.append(float(np.mean(active)))
+                    active_fractions.append(float(active))
 
         samples_array = np.asarray(samples)
 
@@ -76,8 +126,9 @@ class TRLMCSampler:
     step_size: float
     beta: float = 1.0
     a_tame: float = 0.05
+    ell_tame: float = 0.0
 
-    def step(self, x: Array, rng: np.random.Generator) -> tuple[Array, Array]:
+    def step(self, x: Array, rng: np.random.Generator) -> tuple[Array, bool]:
         tau = rng.uniform(0.0, 1.0)
 
         z1 = rng.normal(size=x.shape)
@@ -94,6 +145,7 @@ class TRLMCSampler:
             state=x,
             step_size=self.step_size,
             a_tame=self.a_tame,
+            ell=self.ell_tame,
         )
 
         x_tau = (
@@ -108,6 +160,7 @@ class TRLMCSampler:
             state=x_tau,
             step_size=self.step_size,
             a_tame=self.a_tame,
+            ell=self.ell_tame,
         )
 
         x_next = (
@@ -141,7 +194,7 @@ class TRLMCSampler:
             if step >= burn_in:
                 samples.append(x.copy())
                 if return_active:
-                    active_fractions.append(float(np.mean(active)))
+                    active_fractions.append(float(active))
 
         samples_array = np.asarray(samples)
 

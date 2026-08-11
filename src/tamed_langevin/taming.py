@@ -26,19 +26,46 @@ def adaptive_tamed_drift(
     state: np.ndarray,
     step_size: float,
     a_tame: float,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Return adaptive-tamed drift and active-coordinate mask.
+    ell: float = 0.0,
+) -> tuple[np.ndarray, bool]:
+    """Return globally adaptive-tamed drift and its activation state.
 
     Computes
 
-        h_ad(x) = a*x + (h(x)-a*x)/(1+g(sqrt(lambda)*|h(x)|)).
+        h_ad(x) = a*x + (h(x)-a*x)
+                  /sqrt(1+g(lambda*||x||^(2*(ell+1)))).
 
-    The residual h-a*x is divided, while the switch is triggered by the full drift h.
+    The residual vector is divided by one scalar denominator, triggered by
+    the Euclidean norm of the complete state vector.
     """
+    drift = np.asarray(drift, dtype=float)
+    state = np.asarray(state, dtype=float)
+
     residual = drift - a_tame * state
-    switch = g_switch(np.sqrt(step_size) * np.abs(drift))
-    tamed = a_tame * state + residual / (1.0 + switch)
+    state_norm = float(np.linalg.norm(state))
+    switch_argument = step_size * state_norm ** (2.0 * (ell + 1.0))
+    switch = float(g_switch(switch_argument))
+    tamed = a_tame * state + residual / np.sqrt(1.0 + switch)
     return tamed, switch > 0.0
+
+
+def tamed_drift(
+    drift: np.ndarray,
+    state: np.ndarray,
+    step_size: float,
+    a_tame: float,
+    ell: float = 0.0,
+) -> np.ndarray:
+    """Return the global kTULA drift without the adaptive switch g."""
+    drift = np.asarray(drift, dtype=float)
+    state = np.asarray(state, dtype=float)
+
+    residual = drift - a_tame * state
+    state_norm = float(np.linalg.norm(state))
+    denominator = np.sqrt(
+        1.0 + step_size * state_norm ** (2.0 * (ell + 1.0))
+    )
+    return a_tame * state + residual / denominator
 
 
 def check_g_c1(tol: float = 5.0e-4) -> None:

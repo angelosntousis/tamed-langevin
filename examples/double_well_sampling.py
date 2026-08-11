@@ -4,7 +4,10 @@ from tamed_langevin import KTULASampler, TRLMCSampler
 
 
 def drift(x):
-    return x**3 - x
+    out = np.empty_like(x)
+    out[0] = x[0] ** 3 - x[0]
+    out[1:] = 100.0 * x[1:]
+    return out
 
 
 def main():
@@ -16,6 +19,7 @@ def main():
         step_size=0.01,
         beta=1.0,
         a_tame=0.05,
+        ell_tame=2.0,
     )
 
     trlmc = TRLMCSampler(
@@ -23,6 +27,7 @@ def main():
         step_size=0.01,
         beta=1.0,
         a_tame=0.05,
+        ell_tame=2.0,
     )
 
     ktula_samples, ktula_active = ktula.sample(

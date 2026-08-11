@@ -29,7 +29,7 @@ def run_optimizer(name, optimizer, theta0, n_steps, seed):
             raise ValueError(name)
 
         values.append(objective(theta))
-        active_fractions.append(float(np.mean(active)))
+        active_fractions.append(float(active))
 
     return theta, np.asarray(values), np.asarray(active_fractions)
 
@@ -38,8 +38,12 @@ def main():
     theta0 = np.zeros(20)
     theta0[0] = 10.0
 
-    ktula = KTULAOptimizer(step_size=0.01, beta=1.0e6, a_tame=0.05)
-    trlmc = TRLMCOptimizer(step_size=0.01, beta=1.0e6, a_tame=0.05)
+    ktula = KTULAOptimizer(
+        step_size=0.01, beta=1.0e6, a_tame=0.05, ell_tame=4.0
+    )
+    trlmc = TRLMCOptimizer(
+        step_size=0.01, beta=1.0e6, a_tame=0.05, ell_tame=4.0
+    )
 
     theta_k, values_k, active_k = run_optimizer(
         name="kTULA",
