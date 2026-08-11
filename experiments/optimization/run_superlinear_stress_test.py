@@ -24,8 +24,8 @@ import numpy as np
 from matplotlib.colors import LogNorm
 from matplotlib.figure import Figure
 
-from tamed_langevin import KTULAOptimizer, TRLMCOptimizer, active_fraction
-from tamed_langevin.taming import adaptive_tamed_drift, check_g_c1
+from tamed_langevin import KTULAOptimizer, TRLMCOptimizer
+from tamed_langevin.taming import check_g_c1, g_switch
 
 
 # ============================================================
@@ -66,7 +66,7 @@ LABELS = {
     "ADAM": "Adam",
     "RMSPROP": "RMSProp",
     "AMSGRAD": "AMSGrad",
-    "KTULA": "kTULA",
+    "KTULA": "adaptive kTULA",
     "TRLMC": "tRLMC",
 }
 
@@ -81,20 +81,21 @@ TAMED_METHODS = ["KTULA", "TRLMC"]
 class Config:
     din: int = 20
     width: int = 64
-    depth: int = 3
+    depth: int = 1
     n_train: int = 2000
     n_test: int = 1000
     batch: int = 128
-    n_epochs: int = 20
+    n_epochs: int = 60
     seeds: Tuple[int, ...] = (1, 2, 3, 4, 5)
 
-    lr: float = 0.2
+    lr: float = 0.2 #this lr produces the best results for all methods in the main stress test
     sweep_lrs: Tuple[float, ...] = (0.05, 0.10, 0.20)
-    eta: float = 1.0
+    eta: float = 0.25
     init_scale: float = 2.0
 
     beta: float = 1.0e6
     a_tame: float = 0.05
+    ell_tame: float = 3.0
 
     momentum: float = 0.9
     adam_b1: float = 0.9
@@ -115,6 +116,7 @@ class Config:
     order_x0: float = 2.5
     order_beta: float = 1.0e6
     order_a_tame: float = 0.05
+    order_ell_tame: float = 1.0
     order_lambdas: Tuple[float, ...] = (
         2.0 ** -4,
         2.0 ** -5,
@@ -425,16 +427,18 @@ def train_one(
                         step_size=lr,
                         beta=cfg.beta,
                         a_tame=cfg.a_tame,
+                        ell_tame=cfg.ell_tame,
                     )
 
                     theta, active = optimizer.step(theta, grad, rng_noise)
-                    active_frac = active_fraction(active)
+                    active_frac = float(active)
 
                 elif method == "TRLMC":
                     optimizer = TRLMCOptimizer(
                         step_size=lr,
                         beta=cfg.beta,
                         a_tame=cfg.a_tame,
+                        ell_tame=cfg.ell_tame,
                     )
 
                     def grad_at(theta_mid: np.ndarray) -> np.ndarray:
@@ -447,7 +451,7 @@ def train_one(
                         rng=rng_noise,
                     )
 
-                    active_frac = active_fraction(active)
+                    active_frac = float(active)
 
             if diverged_at is not None or is_diverged(theta, cfg):
                 if diverged_at is None:
@@ -510,19 +514,24 @@ def order_drift(x: np.ndarray) -> np.ndarray:
     return x ** 5 - x
 
 
-def tamed_order_drift(h: np.ndarray, x: np.ndarray, lam: float, a_tame: float) -> np.ndarray:
-    tamed, _ = adaptive_tamed_drift(
-        drift=h,
-        state=x,
-        step_size=lam,
-        a_tame=a_tame,
-    )
-    return tamed
+def tamed_order_drift(
+    h: np.ndarray,
+    x: np.ndarray,
+    lam: float,
+    a_tame: float,
+    ell_tame: float,
+) -> np.ndarray:
+    # Each element is an independent one-dimensional Monte Carlo path. In one
+    # dimension the global norm is |x|, so apply the formula pathwise.
+    switch = g_switch(lam * np.abs(x) ** (2.0 * (ell_tame + 1.0)))
+    return a_tame * x + (h - a_tame * x) / np.sqrt(1.0 + switch)
 
 
 def simulate_order_method(method: str, lam: float, cfg: Config, seed: int) -> Dict[str, float]:
     if method not in TAMED_METHODS:
-        raise ValueError("Observed-order experiment only supports kTULA and tRLMC.")
+        raise ValueError(
+            "Observed-order experiment only supports adaptive kTULA and tRLMC."
+        )
 
     n_steps = int(round(cfg.order_T / lam))
     if abs(n_steps * lam - cfg.order_T) > 1.0e-12:
@@ -536,7 +545,9 @@ def simulate_order_method(method: str, lam: float, cfg: Config, seed: int) -> Di
         h = order_drift(x)
 
         if method == "KTULA":
-            h_t = tamed_order_drift(h, x, lam, cfg.order_a_tame)
+            h_t = tamed_order_drift(
+                h, x, lam, cfg.order_a_tame, cfg.order_ell_tame
+            )
             x = x - lam * h_t + sigma * np.sqrt(lam) * rng.standard_normal(cfg.order_samples)
 
         elif method == "TRLMC":
@@ -547,11 +558,15 @@ def simulate_order_method(method: str, lam: float, cfg: Config, seed: int) -> Di
             d_w_tau = np.sqrt(tau * lam) * z1
             d_w_full = d_w_tau + np.sqrt((1.0 - tau) * lam) * z2
 
-            h_t1 = tamed_order_drift(h, x, lam, cfg.order_a_tame)
+            h_t1 = tamed_order_drift(
+                h, x, lam, cfg.order_a_tame, cfg.order_ell_tame
+            )
             x_mid = x - tau * lam * h_t1 + sigma * d_w_tau
 
             h_mid = order_drift(x_mid)
-            h_t2 = tamed_order_drift(h_mid, x_mid, lam, cfg.order_a_tame)
+            h_t2 = tamed_order_drift(
+                h_mid, x_mid, lam, cfg.order_a_tame, cfg.order_ell_tame
+            )
 
             x = x - lam * h_t2 + sigma * d_w_full
 
@@ -754,6 +769,8 @@ def plot_metric_over_iterations(
     title: str,
     filename: str,
     ylog: bool = True,
+    reference_value: Optional[float] = None,
+    reference_label: Optional[str] = None,
 ):
     fig, ax = plt.subplots(figsize=(9.0, 5.3))
 
@@ -769,6 +786,16 @@ def plot_metric_over_iterations(
 
         ax.plot(iterations, med, color=COLORS[method], label=LABELS[method])
         ax.fill_between(iterations, lo, hi, color=COLORS[method], alpha=0.10, linewidth=0)
+
+    if reference_value is not None:
+        ax.axhline(
+            reference_value,
+            color="0.25",
+            linestyle=":",
+            linewidth=1.6,
+            label=reference_label,
+            zorder=2,
+        )
 
     if ylog:
         ax.set_yscale("log")
@@ -799,7 +826,7 @@ def fig_objective(results, cfg: Config):
     )
 
 
-def fig_test_mse(results, cfg: Config):
+def fig_test_mse(results, cfg: Config, null_test_mse: float):
     plot_metric_over_iterations(
         results,
         cfg,
@@ -811,6 +838,8 @@ def fig_test_mse(results, cfg: Config):
         ),
         filename="fig2_test_mse_all_methods.png",
         ylog=True,
+        reference_value=null_test_mse,
+        reference_label=rf"Null predictor ({null_test_mse:.3f})",
     )
 
 
@@ -908,7 +937,7 @@ def fig_taming_activation(results, cfg: Config):
         ax.plot(iterations, med, color=COLORS[method], label=LABELS[method])
 
     ax.set_xlabel("Iteration")
-    ax.set_ylabel("Taming-active coordinates (%)")
+    ax.set_ylabel("Updates with taming active (%)")
     ax.set_title("Adaptive taming activates during the super-linear transient")
     ax.set_xlim(1, iterations[-1])
     ax.set_ylim(-2, 102)
@@ -1288,7 +1317,7 @@ def main() -> None:
     print("\nGenerating figures...")
 
     fig_objective(results, cfg)
-    fig_test_mse(results, cfg)
+    fig_test_mse(results, cfg, null["median_test_mse"])
     fig_parameter_norm(results, cfg)
     fig_lr_robustness(sweep, cfg)
     fig_taming_activation(results, cfg)
