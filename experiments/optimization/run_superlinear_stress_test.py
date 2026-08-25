@@ -66,8 +66,8 @@ LABELS = {
     "ADAM": "Adam",
     "RMSPROP": "RMSProp",
     "AMSGRAD": "AMSGrad",
-    "KTULA": "adaptive kTULA",
-    "TRLMC": "tRLMC",
+    "KTULA": "adTULA",
+    "TRLMC": "adTRLMC",
 }
 
 METHODS = ["SGD", "ADAM", "RMSPROP", "AMSGRAD", "KTULA", "TRLMC"]

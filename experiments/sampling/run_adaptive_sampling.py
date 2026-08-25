@@ -74,6 +74,15 @@ class Config:
 METHODS = ("ULA", "kTULA", "adaptive kTULA", "tRLMC")
 TAMED_METHODS = METHODS[1:]
 
+# Keep the internal method keys stable for saved data and sampler dispatch, while
+# using the preferred algorithm names everywhere text is rendered in a figure.
+LABELS = {
+    "ULA": "ULA",
+    "kTULA": "kTULA",
+    "adaptive kTULA": "adTULA",
+    "tRLMC": "adTRLMC",
+}
+
 
 # ============================================================
 # Potential and drift
@@ -282,7 +291,7 @@ def save_moment_growth_plot(
     for method in METHODS:
         norm2 = norm2_by_method[method]
         if norm2 is not None:
-            plt.plot(norm2, label=method)
+            plt.plot(norm2, label=LABELS[method])
 
     plt.yscale("log")
     plt.xlabel("iteration")
@@ -308,7 +317,7 @@ def save_trajectory_plot(
     plt.plot(trajectory[:5000])
     plt.xlabel("post burn-in iteration")
     plt.ylabel(r"$X_n^{(1)}$")
-    plt.title(f"{name} trajectory, λ={lam}")
+    plt.title(f"{LABELS[name]} trajectory, λ={lam}")
     plt.tight_layout()
 
     path = os.path.join(cfg.out_dir, f"traj_{file_name}_d{cfg.dim}_lam_{lam}.png")
@@ -332,7 +341,7 @@ def save_density_plot(
         range=(cfg.density_xmin, cfg.density_xmax),
         density=True,
         alpha=cfg.hist_alpha,
-        label=name,
+        label=LABELS[name],
     )
     plt.plot(target_grid, target_density, lw=2, label="Target density")
     plt.xlim(cfg.density_xmin, cfg.density_xmax)
@@ -713,7 +722,7 @@ def main() -> None:
         file_stem = method.lower().replace(" ", "_")
         boxplot_by_lambda(
             second_moment_errors[method],
-            f"{method} accuracy: second-moment error vs step size",
+            f"{LABELS[method]} accuracy: second-moment error vs step size",
             f"{file_stem}_second_moment_error_boxplot.png",
             r"$|\widehat{\mathbb{E}}[X_1^2] - \mathbb{E}_\pi[X_1^2]|$",
             cfg,
@@ -721,7 +730,7 @@ def main() -> None:
 
         boxplot_by_lambda(
             last_second_moment_errors[method],
-            f"{method} accuracy: last-coordinate moment error",
+            f"{LABELS[method]} accuracy: last-coordinate moment error",
             f"{file_stem}_last_coordinate_second_moment_error_boxplot.png",
             rf"$|\widehat{{\mathbb{{E}}}}[X_{{{cfg.dim}}}^2] - 1/(\beta\kappa)|$",
             cfg,
